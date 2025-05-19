@@ -2,10 +2,13 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  registerDecorator, ValidationOptions, ValidatorConstraint, ValidatorConstraintInterface
+  IsISO31661Alpha2,
+  registerDecorator,
+  ValidationOptions,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
 import * as moment from 'moment-timezone';
-
 
 @ValidatorConstraint({ async: false })
 export class IsValidTimezoneConstraint implements ValidatorConstraintInterface {
@@ -30,19 +33,36 @@ export function IsValidTimezone(validationOptions?: ValidationOptions) {
   };
 }
 
-
 export class CreateVisitDto {
   @IsUUID(4)
-  appKey: string;
-
-  @IsUUID(4)
-  sessionId: string;
+  app_key: string;
 
   @IsString()
-  @IsValidTimezone({ message: 'invalid timezone. Use a valid IANA time zone like "UTC" or "Asia/Karachi".' })
-  timezone: string;
+  ip: string;
 
   @IsString()
+  user_agent: string;
+
   @IsOptional()
-  page: string;
+  @IsISO31661Alpha2()
+  iso2?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsValidTimezone({
+    message:
+      'Invalid timezone. Use a valid IANA time zone like "UTC" or "Asia/Karachi".',
+  })
+  timezone?: string;
+
+  @IsOptional()
+  @IsString()
+  referrer?: string;
+
+  @IsOptional()
+  @IsString()
+  origin?: string;
+
+  @IsString()
+  path: string;
 }

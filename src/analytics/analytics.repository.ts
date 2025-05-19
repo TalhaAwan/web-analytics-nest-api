@@ -1,60 +1,69 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { Pool as MyPGPool } from 'pg';
+import { CreateVisitDto } from './dto/analytics.dto';
 
 @Injectable()
 export class AnalyticsRepository {
-  constructor(@Inject('POSTGRESQL_CONNECTION') private pg: MyPGPool) { }
+  constructor(@Inject('POSTGRESQL_CONNECTION') private pg: MyPGPool) {}
 
-  async createVisit({
-    appKey,
-    visitId,
-    sessionId,
-    timezone,
-    country,
-    iso2,
-    referrer,
-    ipAddress,
-    page,
-    userAgent,
-    origin
-  }: {
-    appKey: string;
-    visitId: string;
-    sessionId: string;
-    timezone: string;
-    country: string;
+  async upsertVisit(data: {
     iso2: string;
-    referrer: string;
-    ipAddress: string;
-    page: string;
-    userAgent: string;
-    origin: string;
-  }) {
+    referrer?: string;
+    timezone?: string;
+    user_agent: string;
+    app_key: string;
+    session_id: string;
+  }): Promise<number> {
+    const client = await this.pg.connect();
+    try {
+      await client.query('BEGIN');
 
+      const findQuery = `
+        SELECT id FROM visit WHERE session_id = $1
+      `;
+      const found = await client.query(findQuery, [data.session_id]);
+      if (found.rows.length > 0) {
+        await client.query('COMMIT');
+        return found.rows[0].id;
+      }
 
-    const query = `
-    INSERT INTO visit (app_id, session_id, timezone, country, referrer, ip_address, page, user_agent, visit_id, iso2, origin)
-    SELECT id, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10 FROM app WHERE app_key = $11
-    RETURNING app_id;
-  `;
+      const insertQuery = `
+        INSERT INTO visit (app_id, session_id, timezone, iso2, referrer, user_agent)
+        SELECT id, $1, $2, $3, $4, $5 FROM app WHERE app_key = $6
+        RETURNING id;
+      `;
+      const result = await client.query(insertQuery, [
+        data.session_id,
+        data.timezone,
+        data.iso2,
+        data.referrer,
+        data.user_agent,
+        data.app_key,
+      ]);
 
-    const result = await this.pg.query(query, [
-      sessionId,
-      timezone,
-      country,
-      referrer,
-      ipAddress,
-      page,
-      userAgent,
-      visitId,
-      iso2,
-      origin,
-      appKey
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        throw new HttpException('Invalid app_key', HttpStatus.BAD_REQUEST);
+      }
 
-    ]);
-
-    if (result.rowCount === 0) {
-      throw new HttpException('Invalid appKey', HttpStatus.BAD_REQUEST);
+      await client.query('COMMIT');
+      return result.rows[0].id;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
+  }
+
+  async createPageView(data: {
+    visit_id: number;
+    path: string;
+  }): Promise<void> {
+    const query = `
+      INSERT INTO page_view (visit_id, path)
+      VALUES ($1, $2)
+    `;
+    await this.pg.query(query, [data.visit_id, data.path]);
   }
 }

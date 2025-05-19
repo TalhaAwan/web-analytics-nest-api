@@ -1,6 +1,6 @@
 import { Knex } from 'knex';
 
-const app_key = process.env.APP_ID;
+const app_key = process.env.APP_KEY;
 
 export async function seed(knex: Knex): Promise<void> {
   await knex('app')
